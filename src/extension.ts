@@ -9,15 +9,14 @@ import {
   type HumanEffort,
   type ScoreBreakdown,
 } from "./score";
-
-interface HeadroomEvent {
-  type: "prompt" | "response" | "skim" | "failure" | "edit";
-  at: number;
-  words?: number;
-  gapMs?: number;
-  tool?: string;
-  excerpt?: string;
-}
+import {
+  buildSummary,
+  effortGuidance,
+  simulatedEvents,
+  SIMULATED_SESSION_MS,
+  statusText,
+  type SessionEvent,
+} from "./session";
 
 interface Persisted {
   humanEffort: HumanEffort;
@@ -118,7 +117,7 @@ function breakPath(): string {
   return path.join(root, ".headroom", "break.json");
 }
 
-function readEvents(): HeadroomEvent[] {
+function readEvents(): SessionEvent[] {
   if (!root || !fs.existsSync(eventsPath())) return [];
   return fs
     .readFileSync(eventsPath(), "utf8")
@@ -126,7 +125,7 @@ function readEvents(): HeadroomEvent[] {
     .filter((line) => line.trim().length > 0)
     .flatMap((line) => {
       try {
-        return [JSON.parse(line) as HeadroomEvent];
+        return [JSON.parse(line) as SessionEvent];
       } catch {
         return [];
       }
@@ -178,7 +177,7 @@ function currentBreakdown(): ScoreBreakdown {
 function refresh(context: vscode.ExtensionContext): void {
   const breakdown = currentBreakdown();
   const breaking = readBreak();
-  const label = `🧠 ${breakdown.score}% · Human: ${persisted.humanEffort.toUpperCase()}${breaking.active ? " · BREAK" : ""}`;
+  const label = statusText(breakdown.score, persisted.humanEffort, breaking.active);
   status.text = label;
   status.tooltip = breakdown.lines.join("\n");
   const detail = `${label} | ${breakdown.lines.join(" | ")}`;
@@ -250,36 +249,13 @@ async function setEffort(context: vscode.ExtensionContext): Promise<void> {
 
 function writeRule(effort: HumanEffort): void {
   if (!root) return;
-  const guidance: Record<HumanEffort, string> = {
-    low: [
-      "Human Effort is LOW. This is a communication preference. Keep reasoning as deep as the task needs.",
-      "Lead with the recommendation.",
-      "Use at most 3 short reasons.",
-      "State the risk.",
-      "Skip background the user did not ask for.",
-      "Offer a deeper explanation instead of including it.",
-      "High-risk decisions stay explicit.",
-    ].join("\n"),
-    medium: [
-      "Human Effort is MEDIUM.",
-      "Be concise.",
-      "Give a recommendation when one is clear.",
-      "Include only the key tradeoff.",
-      "Skip extra background.",
-    ].join("\n"),
-    high: [
-      "Human Effort is HIGH.",
-      "The user wants detail.",
-      "Explain the real alternatives and the tradeoff for each.",
-      "Include the reasoning they need to decide.",
-      "Put the recommendation early so the rest is optional.",
-    ].join("\n"),
-  };
   const dir = path.join(root, ".cursor", "rules");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "headroom-runtime.mdc"),
-    ["---", "description: Headroom communication preference", "alwaysApply: true", "---", "", guidance[effort], ""].join("\n"),
+    ["---", "description: Headroom communication preference", "alwaysApply: true", "---", "", effortGuidance(effort), ""].join(
+      "\n",
+    ),
   );
 }
 
@@ -320,34 +296,12 @@ async function endBreak(context: vscode.ExtensionContext): Promise<void> {
   refresh(context);
 }
 
-function buildSummary(events: HeadroomEvent[], since: number): string {
-  const during = events.filter((event) => event.at >= since);
-  const edits = during.filter((event) => event.type === "edit").length;
-  const failures = during.filter((event) => event.type === "failure").length;
-  const last = [...during].reverse().find((event) => event.type === "response" && event.excerpt);
-  return [
-    "While you were away:",
-    `✓ ${edits} file edit${edits === 1 ? "" : "s"}`,
-    `✓ ${failures} tool failure${failures === 1 ? "" : "s"}`,
-    last?.excerpt ? `✓ Last reply: ${last.excerpt}` : "✓ No agent reply recorded during the break",
-    "",
-    "Needs your attention:",
-    "⚠ Review anything the agent stopped before deciding.",
-  ].join("\n");
-}
-
 async function simulate(context: vscode.ExtensionContext): Promise<void> {
   if (!root) return;
   const now = Date.now();
-  persisted.sessionStartedAt = now - 130 * 60_000;
-  persisted.suppressUntil = 0;
-  persisted.armed = true;
+  persisted.sessionStartedAt = now - SIMULATED_SESSION_MS;
   await savePersisted(context);
-  const lines: HeadroomEvent[] = [
-    ...Array.from({ length: 15 }, () => ({ type: "prompt" as const, at: now - 30_000 })),
-    ...Array.from({ length: 4 }, () => ({ type: "skim" as const, at: now - 60_000, words: 180, gapMs: 2_000 })),
-    ...Array.from({ length: 4 }, (_, index) => ({ type: "failure" as const, at: now - (index + 1) * 60_000, tool: "Shell" })),
-  ];
+  const lines = simulatedEvents(now);
   fs.mkdirSync(path.join(root, ".headroom"), { recursive: true });
   fs.appendFileSync(eventsPath(), lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
   output.appendLine("Simulated session pressure. These events are marked only by being written from Headroom: Simulate Session Pressure.");

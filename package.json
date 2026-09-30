@@ -80,7 +80,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -p ./ --watch",
-    "test": "npm run compile && TZ=UTC node --test out/score.test.js"
+    "test": "npm run compile && TZ=UTC node --test out/*.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
