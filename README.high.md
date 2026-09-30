@@ -2,7 +2,7 @@
 
 The model doesn't get tired. You do.
 
-Human Effort for this page: [LOW](README.low.md) · **MEDIUM** · [HIGH](README.high.md)
+Human Effort for this page: [LOW](README.low.md) · [MEDIUM](README.md) · **HIGH**
 
 Headroom is a Cursor extension that adapts the collaboration to how much you can process right now. Machine reasoning stays available. The amount of text you have to read goes down. A break becomes a handoff instead of lost time.
 
@@ -205,8 +205,70 @@ Break & Delegate puts the break prompt on your clipboard so it can be pasted int
 - The seven minutes are a reminder. Ending the break is **Headroom: End Break**.
 - The hook integration targets Cursor.
 
+# Detail
+
+## The score, exactly
+
+The score is `baseline − penalties`, clamped to 0–100. The constants live in `SCORE` in `src/score.ts`.
+
+| Term | Rule | Cap |
+| --- | --- | --- |
+| Baseline | Capacity of the focus window that contains the clock. 70 outside every window. | — |
+| Session | −1 per 3 minutes after the first 45 | −25 |
+| Prompts | −4 for each prompt above 8 in the last 10 minutes | −20 |
+| Possible skimming | −8 for each in the last 30 minutes | −24 |
+| Tool failures | −6 for each in the last 15 minutes. User interrupts do not count. | −18 |
+
+Possible skimming is recorded when a reply of at least 80 words is followed by the next prompt in under 10 seconds.
+
+Focus windows include `from` and exclude `to`, and can cross midnight. `headroom.timeZone` picks the clock. Left empty, it uses the machine the folder is on, which over SSH is the remote host.
+
+Human Effort is not a parameter of `computeScore`.
+
+**Headroom: Simulate Session Pressure** moves the session start back 130 minutes, then adds 15 prompts, 4 possible skims, and 4 tool failures.
+
+## When a break is suggested
+
+- Below `headroom.breakThreshold` (default 35), and only when armed.
+- Showing the question, or choosing Keep Working, silences it for 30 minutes.
+- Suggestions re-arm when the score reaches 50, or when the 30 minutes are over.
+- No suggestion appears while a break is active.
+
+This keeps a score that sits near 35 from asking every few seconds.
+
+## Hooks
+
+On activation, the extension copies `hooks/headroom-hook.js` to `~/.cursor/hooks/` and merges `~/.cursor/hooks.json`. Entries from other tools stay in place. This repository has the same hook under `.cursor/` too. Identical input is handled once, using a marker file in `.headroom/seen/`.
+
+| Event | What Headroom does |
+| --- | --- |
+| `beforeSubmitPrompt` | Logs the prompt and checks for possible skimming. Marks the break prompt as sent. |
+| `afterAgentResponse` | Logs the word count and a 240-character excerpt. |
+| `postToolUseFailure` | Logs failures that are not user interrupts. |
+| `afterFileEdit` | Logs the edit. |
+| `stop` | During a break, sends the break prompt once if it was never sent. |
+
+Events are appended to `.headroom/events.jsonl`. The extension watches that file and rescores every 3 seconds.
+
+## The break, step by step
+
+1. **Break & Delegate** writes `.headroom/break.json` with `active: true`.
+2. The break prompt is copied to the clipboard. `composer.newAgentChat` opens a chat, and a paste drops the prompt into its input box.
+3. You press Enter.
+4. `beforeSubmitPrompt` sees the break prompt and sets `followupSent`.
+5. If the prompt was never sent, the next `stop` with `status: completed` and `loop_count: 0` returns it as `followup_message`. `loop_limit` 1 caps it at one continuation.
+6. **Headroom: End Break** shows the edits, failures, and last reply since the break began.
+
+## Why it is built this way
+
+- **Effort is a rule file.** `beforeSubmitPrompt` cannot add context to the prompt. A gitignored `.cursor/rules/headroom-runtime.mdc` with `alwaysApply` can, starting on the next turn.
+- **Effort stays out of the score.** The score is an estimate. Effort is your choice. Mixing them would let a preference look like evidence.
+- **The agent decides whether work is left.** A fixed plan made the demo edit a README line nobody needed. The current prompt allows "no work was needed," and says to do nothing when unsure.
+- **One continuation, then stop.** A break is a handoff, not an autonomous run.
+- **The paste, not an auto-send.** Cursor has no supported command that submits a chat message.
+
 ## Smoke test
 
-`npm test` compiles and runs 16 tests: the score, the break suggestion and its cooldown, the hook's skimming and failure records, and the break follow-up being sent exactly once.
+`npm test` compiles and runs 16 Node tests in UTC. They cover focus windows, each penalty, the suggestion cooldown, the effort rule text, the diagnostics lines, the hook's event records, sending the break prompt exactly once, and the hook installer keeping unrelated hooks.
 
 For extension development, Run and Debug → **Run Extension** opens an Extension Development Host. The installed extension is what the steps above use.
