@@ -166,7 +166,7 @@ From this repository:
 ```bash
 npm install
 npm run package
-cursor --install-extension headroom-0.1.1.vsix
+cursor --install-extension headroom-0.1.2.vsix
 ```
 
 Extensions → **Install from VSIX** uses the same file.
