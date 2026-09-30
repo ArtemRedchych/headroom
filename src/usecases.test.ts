@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { nextSuggestion, type FocusWindow } from "./score";
 import {
+  BREAK_PROMPT,
   buildSummary,
   effortGuidance,
   scoreFromEvents,
@@ -136,16 +137,29 @@ test("the hook records possible skimming, ignores an interrupted failure, and fo
       active: true,
       startedAt: 1,
       followupSent: false,
-      approvedPlan: "Add the approved showcase line to README.md.",
+      approvedPlan: "",
     }),
   );
   const firstStop = runHook(root, { hook_event_name: "stop", status: "completed", loop_count: 0 });
   const secondStop = runHook(root, { hook_event_name: "stop", status: "completed", loop_count: 0 });
-  assert.match(String(firstStop.followup_message), /short break/);
-  assert.match(String(firstStop.followup_message), /approved showcase line/);
+  assert.equal(firstStop.followup_message, BREAK_PROMPT);
+  assert.match(BREAK_PROMPT, /no work was needed/);
+  assert.match(BREAK_PROMPT, /do not invent work/);
   assert.equal(secondStop.followup_message, undefined);
   const breakFile = JSON.parse(fs.readFileSync(path.join(root, ".headroom", "break.json"), "utf8")) as {
     followupSent: boolean;
   };
   assert.equal(breakFile.followupSent, true);
+});
+
+test("sending the break prompt in a new chat prevents a second follow-up", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "headroom-hook-"));
+  fs.mkdirSync(path.join(root, ".headroom"));
+  fs.writeFileSync(
+    path.join(root, ".headroom", "break.json"),
+    JSON.stringify({ active: true, startedAt: 1, followupSent: false, approvedPlan: "" }),
+  );
+  runHook(root, { hook_event_name: "beforeSubmitPrompt", prompt: BREAK_PROMPT });
+  const stop = runHook(root, { hook_event_name: "stop", status: "completed", loop_count: 0 });
+  assert.equal(stop.followup_message, undefined);
 });

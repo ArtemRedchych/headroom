@@ -11,12 +11,15 @@ export interface SessionEvent {
 
 export const SIMULATED_SESSION_MS = 130 * 60_000;
 
-export const SHOWCASE_PLAN = [
-  "1. In README.md, under the heading \"## Smoke test\", add this exact line if it is missing:",
-  "Break & Delegate runs only the plan the user approved before the break.",
-  "2. Run npm test.",
-  "3. Stop. Do not change product behavior, dependencies, or architecture.",
-].join("\n");
+export const BREAK_PROMPT = [
+  "The user is taking a short break.",
+  "Decide whether any work is needed.",
+  "If the current task is already done, or the only remaining step needs the user, do not invent work and do not edit files. The user can leave without a plan.",
+  "If safe work is already in progress, write a plan of at most 3 steps from that work, do only those steps, and stop.",
+  "If unsure, do nothing.",
+  "Stop before architecture changes, database or schema changes, public API changes, new dependencies, destructive operations, security-sensitive decisions, or any new task.",
+  'When you stop, start the summary with "While you were away:". If you did nothing, say that no work was needed. If you followed a plan, include that plan.',
+].join(" ");
 
 export function statusText(score: number, effort: HumanEffort, breakActive: boolean): string {
   return `🧠 ${score}% · Human: ${effort.toUpperCase()}${breakActive ? " · BREAK" : ""}`;

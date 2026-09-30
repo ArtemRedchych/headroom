@@ -2,13 +2,15 @@
   "name": "headroom",
   "displayName": "Headroom",
   "description": "Adapt Cursor communication to the developer's current effort and session pressure.",
-  "version": "0.0.1",
+  "version": "0.1.1",
+  "license": "MIT",
   "publisher": "artem",
+  "extensionKind": ["workspace"],
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
-  "activationEvents": ["*"],
+  "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -18,7 +20,7 @@
       },
       {
         "command": "headroom.break",
-        "title": "Headroom: Approve Plan & Break"
+        "title": "Headroom: Break & Delegate"
       },
       {
         "command": "headroom.keepWorking",
@@ -80,11 +82,13 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -p ./ --watch",
-    "test": "npm run compile && TZ=UTC node --test out/*.test.js"
+    "test": "npm run compile && TZ=UTC node --test out/*.test.js",
+    "package": "npm run compile && vsce package --allow-missing-repository --allow-star-activation"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.6.0",
     "typescript": "^5.8.0"
   }
 }

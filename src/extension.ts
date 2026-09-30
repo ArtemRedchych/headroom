@@ -1,6 +1,8 @@
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
+import { installUserHooks } from "./installHooks";
 import {
   computeScore,
   nextSuggestion,
@@ -10,9 +12,9 @@ import {
   type ScoreBreakdown,
 } from "./score";
 import {
+  BREAK_PROMPT,
   buildSummary,
   effortGuidance,
-  SHOWCASE_PLAN,
   simulatedEvents,
   SIMULATED_SESSION_MS,
   statusText,
@@ -49,13 +51,15 @@ export function activate(context: vscode.ExtensionContext): void {
   output = vscode.window.createOutputChannel("Headroom");
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   status.command = "headroom.setEffort";
+  status.text = "🧠 …";
+  status.show();
   root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
   persisted = readPersisted(context);
 
   context.subscriptions.push(output, status);
   context.subscriptions.push(
     vscode.commands.registerCommand("headroom.setEffort", () => setEffort(context)),
-    vscode.commands.registerCommand("headroom.break", () => approveAndBreak(context)),
+    vscode.commands.registerCommand("headroom.break", () => beginBreak(context)),
     vscode.commands.registerCommand("headroom.keepWorking", () => keepWorking(context)),
     vscode.commands.registerCommand("headroom.endBreak", () => endBreak(context)),
     vscode.commands.registerCommand("headroom.simulate", () => simulate(context)),
@@ -82,6 +86,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  try {
+    installUserHooks(path.join(context.extensionPath, "hooks", "headroom-hook.js"), path.join(os.homedir(), ".cursor"));
+    output.appendLine("Headroom hooks installed for this user. No hooks.json edit is required.");
+  } catch (error) {
+    output.appendLine(`Headroom could not install hooks: ${error instanceof Error ? error.message : String(error)}`);
+  }
   writeRule(persisted.humanEffort);
   void savePersisted(context);
   refresh(context);
@@ -217,7 +227,7 @@ async function suggestBreak(context: vscode.ExtensionContext, score: number): Pr
       "Break & Delegate",
       "Keep Working",
     );
-    if (choice === "Break & Delegate") await approveAndBreak(context);
+    if (choice === "Break & Delegate") await beginBreak(context);
     if (choice === "Keep Working") await keepWorking(context);
   } finally {
     suggestionOpen = false;
@@ -235,13 +245,13 @@ async function setEffort(context: vscode.ExtensionContext): Promise<void> {
   if (breaking.active) {
     items.push({ label: "End break", description: "Show the return summary", action: "end" });
   } else if (breakdown.score < vscode.workspace.getConfiguration("headroom").get<number>("breakThreshold", 35)) {
-    items.push({ label: "Break & Delegate", description: "Hand off one safe continuation", action: "break" });
+    items.push({ label: "Break & Delegate", description: "Check for safe work, or leave with nothing to do", action: "break" });
   }
   const picked = await vscode.window.showQuickPick(items, {
     placeHolder: `Headroom ${breakdown.score}% · Human ${persisted.humanEffort.toUpperCase()}`,
   });
   if (!picked) return;
-  if (picked.action === "break") return approveAndBreak(context);
+  if (picked.action === "break") return beginBreak(context);
   if (picked.action === "end") return endBreak(context);
   persisted.humanEffort = picked.action as HumanEffort;
   await savePersisted(context);
@@ -262,27 +272,47 @@ function writeRule(effort: HumanEffort): void {
   );
 }
 
-async function approveAndBreak(context: vscode.ExtensionContext): Promise<void> {
-  const choice = await vscode.window.showInformationMessage(
-    `Approve this plan, then take a break?\n\n${SHOWCASE_PLAN}`,
-    { modal: true },
-    "Approve & take a break",
-  );
-  if (choice !== "Approve & take a break") return;
-  await startBreak(context, SHOWCASE_PLAN);
+async function runCommand(command: string, ...args: unknown[]): Promise<boolean> {
+  try {
+    await vscode.commands.executeCommand(command, ...args);
+    output.appendLine(`Break chat command ran: ${command}.`);
+    return true;
+  } catch (error) {
+    output.appendLine(`${command}: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
 }
 
-async function startBreak(context: vscode.ExtensionContext, approvedPlan: string): Promise<void> {
+async function openBreakChat(prompt: string): Promise<boolean> {
+  await vscode.env.clipboard.writeText(prompt);
+  const opened = await runCommand("composer.newAgentChat");
+  if (!opened) return false;
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  await runCommand("editor.action.clipboardPasteAction");
+  return true;
+}
+
+async function beginBreak(context: vscode.ExtensionContext): Promise<void> {
   const startedAt = Date.now();
-  writeBreak({ active: true, startedAt, followupSent: false, approvedPlan });
+  writeBreak({ active: true, startedAt, followupSent: false, approvedPlan: "" });
   persisted.suppressUntil = 0;
   await savePersisted(context);
   clearTimeout(breakTimer);
   breakTimer = setTimeout(() => {
     void vscode.window.showInformationMessage("7 minutes are up. Run Headroom: End Break for the summary.");
   }, BREAK_MS);
-  output.appendLine("Break approved. The next completed agent turn may do only the approved plan.");
-  void vscode.window.showInformationMessage("Plan approved. One continuation will run when the current agent turn stops.");
+  const opened = await openBreakChat(BREAK_PROMPT);
+  if (!opened) {
+    output.appendLine("Could not open a break chat. The next completed agent turn gets the break instructions.");
+    void vscode.window.showInformationMessage(
+      "Break started. The next finished agent turn will check whether any safe work is left.",
+    );
+  } else {
+    output.appendLine("Break chat opened and the break prompt is on the clipboard.");
+    void vscode.window.showInformationMessage(
+      "Break chat opened. Press Enter to send the break prompt. If the box is empty, press Cmd+V first.",
+    );
+  }
   refresh(context);
 }
 

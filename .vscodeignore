@@ -1,0 +1,12 @@
+.vscode/**
+.git/**
+.cursor/**
+.headroom/**
+node_modules/**
+src/**
+**/*.map
+out/**/*.test.js
+tsconfig.json
+docs/**
+AGENTS.md
+*.vsix
