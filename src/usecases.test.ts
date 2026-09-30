@@ -132,11 +132,17 @@ test("the hook records possible skimming, ignores an interrupted failure, and fo
 
   fs.writeFileSync(
     path.join(root, ".headroom", "break.json"),
-    JSON.stringify({ active: true, startedAt: 1, followupSent: false }),
+    JSON.stringify({
+      active: true,
+      startedAt: 1,
+      followupSent: false,
+      approvedPlan: "Add the approved showcase line to README.md.",
+    }),
   );
   const firstStop = runHook(root, { hook_event_name: "stop", status: "completed", loop_count: 0 });
   const secondStop = runHook(root, { hook_event_name: "stop", status: "completed", loop_count: 0 });
   assert.match(String(firstStop.followup_message), /short break/);
+  assert.match(String(firstStop.followup_message), /approved showcase line/);
   assert.equal(secondStop.followup_message, undefined);
   const breakFile = JSON.parse(fs.readFileSync(path.join(root, ".headroom", "break.json"), "utf8")) as {
     followupSent: boolean;

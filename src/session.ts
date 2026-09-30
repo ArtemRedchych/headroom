@@ -11,6 +11,13 @@ export interface SessionEvent {
 
 export const SIMULATED_SESSION_MS = 130 * 60_000;
 
+export const SHOWCASE_PLAN = [
+  "1. In README.md, under the heading \"## Smoke test\", add this exact line if it is missing:",
+  "Break & Delegate runs only the plan the user approved before the break.",
+  "2. Run npm test.",
+  "3. Stop. Do not change product behavior, dependencies, or architecture.",
+].join("\n");
+
 export function statusText(score: number, effort: HumanEffort, breakActive: boolean): string {
   return `🧠 ${score}% · Human: ${effort.toUpperCase()}${breakActive ? " · BREAK" : ""}`;
 }

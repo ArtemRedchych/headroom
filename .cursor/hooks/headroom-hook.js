@@ -7,13 +7,18 @@ const path = require("path");
 const LONG_WORDS = 80;
 const SKIM_GAP_MS = 10_000;
 
-const FOLLOWUP = [
-  "The user is taking a short break.",
-  "Continue only the already-agreed task.",
-  "Allowed: straightforward implementation, tests, debugging, and safe cleanup.",
-  "Stop before architecture changes, database or schema changes, public API changes, new dependencies, destructive operations, security-sensitive decisions, or unclear product decisions.",
-  "When you stop, summarize what was completed and what needs the user. Start that summary with \"While you were away:\".",
-].join(" ");
+function followupMessage(plan) {
+  const approved = String(plan || "").trim();
+  const task = approved
+    ? `Approved plan, do only this and then stop: ${approved}`
+    : "There is no approved plan. Do not invent work. Do not edit files.";
+  return [
+    "The user is taking a short break.",
+    task,
+    "Stop before architecture changes, database or schema changes, public API changes, new dependencies, destructive operations, security-sensitive decisions, or anything not in the approved plan.",
+    "When you stop, summarize what was completed and what needs the user. Start that summary with \"While you were away:\".",
+  ].join(" ");
+}
 
 function readStdin() {
   return new Promise((resolve) => {
@@ -70,9 +75,10 @@ function readBreak(root) {
       active: Boolean(parsed.active),
       startedAt: typeof parsed.startedAt === "number" ? parsed.startedAt : null,
       followupSent: Boolean(parsed.followupSent),
+      approvedPlan: typeof parsed.approvedPlan === "string" ? parsed.approvedPlan : "",
     };
   } catch {
-    return { active: false, startedAt: null, followupSent: false };
+    return { active: false, startedAt: null, followupSent: false, approvedPlan: "" };
   }
 }
 
@@ -129,7 +135,7 @@ function handle(raw) {
         path.join(root, ".headroom", "break.json"),
         JSON.stringify({ ...state, followupSent: true }, null, 2),
       );
-      return { followup_message: FOLLOWUP };
+      return { followup_message: followupMessage(state.approvedPlan) };
     }
     return {};
   }

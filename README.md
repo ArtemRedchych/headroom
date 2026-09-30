@@ -42,4 +42,12 @@ In the Extension Development Host:
 
 A live skimming check: after a reply of about 80 words or more, send another prompt within 10 seconds. The score should fall and the log should say possible skimming.
 
-Break & Delegate sends one safe-work follow-up when an agent turn completes. It does not start an agent by itself if nothing is running.
+## Showcase break
+
+1. Start an agent turn in this workspace. Any short reply is enough. The follow-up runs when that turn stops.
+2. In the Extension Development Host, run **Headroom: Approve Plan & Break**.
+3. Read the plan in the dialog. Choose **Approve & take a break** only if those steps are what you want done.
+4. Leave. Cursor sends one follow-up containing that plan. The agent may do those steps and then stop with **While you were away:**.
+5. Run **Headroom: End Break** for the short summary.
+
+Without an approved plan, the follow-up tells the agent not to edit anything.

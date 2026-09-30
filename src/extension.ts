@@ -12,6 +12,7 @@ import {
 import {
   buildSummary,
   effortGuidance,
+  SHOWCASE_PLAN,
   simulatedEvents,
   SIMULATED_SESSION_MS,
   statusText,
@@ -29,6 +30,7 @@ interface BreakFile {
   active: boolean;
   startedAt: number | null;
   followupSent: boolean;
+  approvedPlan: string;
 }
 
 const STATE_KEY = "headroom.session";
@@ -53,7 +55,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(output, status);
   context.subscriptions.push(
     vscode.commands.registerCommand("headroom.setEffort", () => setEffort(context)),
-    vscode.commands.registerCommand("headroom.break", () => startBreak(context)),
+    vscode.commands.registerCommand("headroom.break", () => approveAndBreak(context)),
     vscode.commands.registerCommand("headroom.keepWorking", () => keepWorking(context)),
     vscode.commands.registerCommand("headroom.endBreak", () => endBreak(context)),
     vscode.commands.registerCommand("headroom.simulate", () => simulate(context)),
@@ -139,9 +141,10 @@ function readBreak(): BreakFile {
       active: Boolean(parsed.active),
       startedAt: typeof parsed.startedAt === "number" ? parsed.startedAt : null,
       followupSent: Boolean(parsed.followupSent),
+      approvedPlan: typeof parsed.approvedPlan === "string" ? parsed.approvedPlan : "",
     };
   } catch {
-    return { active: false, startedAt: null, followupSent: false };
+    return { active: false, startedAt: null, followupSent: false, approvedPlan: "" };
   }
 }
 
@@ -214,7 +217,7 @@ async function suggestBreak(context: vscode.ExtensionContext, score: number): Pr
       "Break & Delegate",
       "Keep Working",
     );
-    if (choice === "Break & Delegate") await startBreak(context);
+    if (choice === "Break & Delegate") await approveAndBreak(context);
     if (choice === "Keep Working") await keepWorking(context);
   } finally {
     suggestionOpen = false;
@@ -238,7 +241,7 @@ async function setEffort(context: vscode.ExtensionContext): Promise<void> {
     placeHolder: `Headroom ${breakdown.score}% · Human ${persisted.humanEffort.toUpperCase()}`,
   });
   if (!picked) return;
-  if (picked.action === "break") return startBreak(context);
+  if (picked.action === "break") return approveAndBreak(context);
   if (picked.action === "end") return endBreak(context);
   persisted.humanEffort = picked.action as HumanEffort;
   await savePersisted(context);
@@ -259,17 +262,27 @@ function writeRule(effort: HumanEffort): void {
   );
 }
 
-async function startBreak(context: vscode.ExtensionContext): Promise<void> {
+async function approveAndBreak(context: vscode.ExtensionContext): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(
+    `Approve this plan, then take a break?\n\n${SHOWCASE_PLAN}`,
+    { modal: true },
+    "Approve & take a break",
+  );
+  if (choice !== "Approve & take a break") return;
+  await startBreak(context, SHOWCASE_PLAN);
+}
+
+async function startBreak(context: vscode.ExtensionContext, approvedPlan: string): Promise<void> {
   const startedAt = Date.now();
-  writeBreak({ active: true, startedAt, followupSent: false });
+  writeBreak({ active: true, startedAt, followupSent: false, approvedPlan });
   persisted.suppressUntil = 0;
   await savePersisted(context);
   clearTimeout(breakTimer);
   breakTimer = setTimeout(() => {
     void vscode.window.showInformationMessage("7 minutes are up. Run Headroom: End Break for the summary.");
   }, BREAK_MS);
-  output.appendLine("Break & Delegate started. The next completed agent turn may continue once with safe work.");
-  void vscode.window.showInformationMessage("Break & Delegate is on. One safe continuation can run when the current agent turn stops.");
+  output.appendLine("Break approved. The next completed agent turn may do only the approved plan.");
+  void vscode.window.showInformationMessage("Plan approved. One continuation will run when the current agent turn stops.");
   refresh(context);
 }
 
@@ -285,7 +298,7 @@ async function endBreak(context: vscode.ExtensionContext): Promise<void> {
   const breaking = readBreak();
   const since = breaking.startedAt ?? Date.now();
   const summary = buildSummary(readEvents(), since);
-  writeBreak({ active: false, startedAt: null, followupSent: false });
+  writeBreak({ active: false, startedAt: null, followupSent: false, approvedPlan: "" });
   clearTimeout(breakTimer);
   persisted.suppressUntil = Date.now() + SCORE.suppressMs;
   persisted.armed = false;
@@ -313,7 +326,7 @@ async function resetSession(context: vscode.ExtensionContext): Promise<void> {
   persisted.suppressUntil = 0;
   persisted.armed = true;
   await savePersisted(context);
-  writeBreak({ active: false, startedAt: null, followupSent: false });
+  writeBreak({ active: false, startedAt: null, followupSent: false, approvedPlan: "" });
   clearTimeout(breakTimer);
   if (root) {
     fs.mkdirSync(path.join(root, ".headroom"), { recursive: true });
