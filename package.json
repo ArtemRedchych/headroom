@@ -1,0 +1,90 @@
+{
+  "name": "headroom",
+  "displayName": "Headroom",
+  "description": "Adapt Cursor communication to the developer's current effort and session pressure.",
+  "version": "0.0.1",
+  "publisher": "artem",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["*"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "headroom.setEffort",
+        "title": "Headroom: Set Human Effort"
+      },
+      {
+        "command": "headroom.break",
+        "title": "Headroom: Break & Delegate"
+      },
+      {
+        "command": "headroom.keepWorking",
+        "title": "Headroom: Keep Working"
+      },
+      {
+        "command": "headroom.endBreak",
+        "title": "Headroom: End Break"
+      },
+      {
+        "command": "headroom.simulate",
+        "title": "Headroom: Simulate Session Pressure"
+      },
+      {
+        "command": "headroom.reset",
+        "title": "Headroom: Reset Session"
+      },
+      {
+        "command": "headroom.diagnostics",
+        "title": "Headroom: Show Diagnostics"
+      }
+    ],
+    "configuration": {
+      "title": "Headroom",
+      "properties": {
+        "headroom.focusWindows": {
+          "type": "array",
+          "description": "Personal focus windows. Capacity is the Headroom baseline while the clock is inside the window.",
+          "default": [
+            { "from": "08:00", "to": "11:00", "capacity": 100 },
+            { "from": "11:00", "to": "17:00", "capacity": 55 },
+            { "from": "17:00", "to": "19:00", "capacity": 90 }
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": { "type": "string", "description": "Start, HH:MM, inclusive." },
+              "to": { "type": "string", "description": "End, HH:MM, exclusive." },
+              "capacity": { "type": "number", "minimum": 0, "maximum": 100 }
+            },
+            "required": ["from", "to", "capacity"]
+          }
+        },
+        "headroom.breakThreshold": {
+          "type": "number",
+          "default": 35,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Suggest a break when the score is below this value. Recovery for a new dip is 50."
+        },
+        "headroom.timeZone": {
+          "type": "string",
+          "default": "",
+          "description": "IANA timezone for focus windows, for example Europe/Warsaw. Empty uses the extension host clock. On Remote SSH that is the VM."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -p ./ --watch",
+    "test": "npm run compile && TZ=UTC node --test out/score.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.8.0"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": ".cursor/hooks/headroom-hook.js",
+        "timeout": 5
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": ".cursor/hooks/headroom-hook.js",
+        "timeout": 5
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "command": ".cursor/hooks/headroom-hook.js",
+        "timeout": 5
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/headroom-hook.js",
+        "timeout": 5
+      }
+    ],
+    "stop": [
+      {
+        "command": ".cursor/hooks/headroom-hook.js",
+        "timeout": 5,
+        "loop_limit": 1
+      }
+    ]
+  }
+}
